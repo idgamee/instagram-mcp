@@ -1,4 +1,4 @@
-const BASE_URL = "https://graph.facebook.com/v22.0";
+const BASE_URL = "https://graph.instagram.com/v22.0";
 
 export class InstagramClient {
   constructor({ accessToken, igUserId }) {
