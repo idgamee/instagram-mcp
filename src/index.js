@@ -180,23 +180,36 @@ app.get("/auth/callback", async (req, res) => {
     if (llData.error) throw new Error(llData.error.message);
 
     // Discover linked Instagram Business accounts
+    // Request instagram_business_account inline to avoid N+1 calls
     const pagesRes = await fetch(
-      `https://graph.facebook.com/v22.0/me/accounts?access_token=${llData.access_token}`
+      `https://graph.facebook.com/v22.0/me/accounts?` +
+        new URLSearchParams({
+          fields: "id,name,access_token,instagram_business_account",
+          access_token: llData.access_token,
+        })
     );
     const pagesData = await pagesRes.json();
 
     const igAccounts = [];
     for (const page of pagesData.data ?? []) {
-      const igRes = await fetch(
-        `https://graph.facebook.com/v22.0/${page.id}?fields=instagram_business_account&access_token=${page.access_token}`
-      );
-      const igData = await igRes.json();
-      if (igData.instagram_business_account?.id) {
-        igAccounts.push({
-          pageId: page.id,
-          pageName: page.name,
-          igUserId: igData.instagram_business_account.id,
-        });
+      // instagram_business_account may already be in the page object (inline field)
+      // or we fall back to a dedicated request using the page-level token
+      let igId = page.instagram_business_account?.id;
+
+      if (!igId && page.access_token) {
+        const igRes = await fetch(
+          `https://graph.facebook.com/v22.0/${page.id}?` +
+            new URLSearchParams({
+              fields: "instagram_business_account",
+              access_token: page.access_token,
+            })
+        );
+        const igData = await igRes.json();
+        igId = igData.instagram_business_account?.id;
+      }
+
+      if (igId) {
+        igAccounts.push({ pageId: page.id, pageName: page.name, igUserId: igId });
       }
     }
 
@@ -215,6 +228,9 @@ app.get("/auth/callback", async (req, res) => {
 
   <h3>Long-Lived Access Token (válido 60 dias):</h3>
   <pre>${llData.access_token}</pre>
+
+  <h3>Páginas Facebook encontradas (raw):</h3>
+  <pre>${JSON.stringify(pagesData, null, 2)}</pre>
 
   <h3>Contas Instagram encontradas:</h3>
   <pre>${JSON.stringify(igAccounts, null, 2)}</pre>
