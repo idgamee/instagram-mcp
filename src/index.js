@@ -195,7 +195,7 @@ app.get("/auth/callback", async (req, res) => {
     const permsData = await permsRes.json();
     console.log("[oauth] /me/permissions:", JSON.stringify(permsData));
 
-    // Discover linked Instagram Business accounts
+    // ── Strategy 1: /me/accounts (pages linked to the user) ─────────────────
     const pagesRes = await fetch(
       `https://graph.facebook.com/v22.0/me/accounts?` +
         new URLSearchParams({
@@ -228,6 +228,37 @@ app.get("/auth/callback", async (req, res) => {
       }
     }
 
+    // ── Strategy 2: /me?fields=instagram_business_account (User Access Token) ─
+    const meIgRes = await fetch(
+      `https://graph.facebook.com/v22.0/me?` +
+        new URLSearchParams({
+          fields: "id,name,instagram_business_account",
+          access_token: llData.access_token,
+        })
+    );
+    const meIgData = await meIgRes.json();
+    console.log("[oauth] /me instagram_business_account:", JSON.stringify(meIgData));
+
+    if (meIgData.instagram_business_account?.id && !igAccounts.find((a) => a.igUserId === meIgData.instagram_business_account.id)) {
+      igAccounts.push({ pageId: null, pageName: meIgData.name, igUserId: meIgData.instagram_business_account.id, source: "me" });
+    }
+
+    // ── Strategy 3: direct fetch by known ID 17841401956717107 ───────────────
+    const KNOWN_IG_ID = "17841401956717107";
+    const directRes = await fetch(
+      `https://graph.facebook.com/v22.0/${KNOWN_IG_ID}?` +
+        new URLSearchParams({
+          fields: "id,name,biography,followers_count,username",
+          access_token: llData.access_token,
+        })
+    );
+    const directData = await directRes.json();
+    console.log("[oauth] direct IG fetch:", JSON.stringify(directData));
+
+    if (directData.id && !igAccounts.find((a) => a.igUserId === directData.id)) {
+      igAccounts.push({ pageId: null, pageName: directData.name ?? directData.username, igUserId: directData.id, source: "direct" });
+    }
+
     res.send(`<!DOCTYPE html>
 <html>
 <head><title>Instagram MCP – Setup</title>
@@ -244,8 +275,14 @@ app.get("/auth/callback", async (req, res) => {
   <h3>Long-Lived Access Token (válido 60 dias):</h3>
   <pre>${llData.access_token}</pre>
 
-  <h3>Páginas Facebook encontradas (raw):</h3>
+  <h3>Strategy 1 — /me/accounts (raw):</h3>
   <pre>${JSON.stringify(pagesData, null, 2)}</pre>
+
+  <h3>Strategy 2 — /me instagram_business_account:</h3>
+  <pre>${JSON.stringify(meIgData, null, 2)}</pre>
+
+  <h3>Strategy 3 — direct fetch ID 17841401956717107:</h3>
+  <pre>${JSON.stringify(directData, null, 2)}</pre>
 
   <h3>Contas Instagram encontradas:</h3>
   <pre>${JSON.stringify(igAccounts, null, 2)}</pre>
