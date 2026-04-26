@@ -143,10 +143,8 @@ app.get("/auth/login", (req, res) => {
   url.searchParams.set(
     "scope",
     [
-      "instagram_basic",
-      "instagram_manage_insights",
-      "pages_show_list",
-      "pages_read_engagement",
+      "instagram_business_basic",
+      "instagram_business_manage_insights",
     ].join(",")
   );
   url.searchParams.set("response_type", "code");
