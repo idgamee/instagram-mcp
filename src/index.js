@@ -165,6 +165,7 @@ app.get("/auth/callback", async (req, res) => {
         new URLSearchParams({ client_id: appId, client_secret: appSecret, redirect_uri: REDIRECT_URI, code })
     );
     const shortData = await shortRes.json();
+    console.log("[oauth] short-lived token response:", JSON.stringify(shortData));
     if (shortData.error) throw new Error(shortData.error.message);
 
     const llRes = await fetch(
@@ -177,10 +178,24 @@ app.get("/auth/callback", async (req, res) => {
         })
     );
     const llData = await llRes.json();
+    console.log("[oauth] long-lived token response:", JSON.stringify({ ...llData, access_token: llData.access_token?.slice(0, 20) + "…" }));
     if (llData.error) throw new Error(llData.error.message);
 
+    // Log which Facebook user authorized
+    const meRes = await fetch(
+      `https://graph.facebook.com/v22.0/me?fields=id,name,email&access_token=${llData.access_token}`
+    );
+    const meData = await meRes.json();
+    console.log("[oauth] /me:", JSON.stringify(meData));
+
+    // Log granted permissions
+    const permsRes = await fetch(
+      `https://graph.facebook.com/v22.0/me/permissions?access_token=${llData.access_token}`
+    );
+    const permsData = await permsRes.json();
+    console.log("[oauth] /me/permissions:", JSON.stringify(permsData));
+
     // Discover linked Instagram Business accounts
-    // Request instagram_business_account inline to avoid N+1 calls
     const pagesRes = await fetch(
       `https://graph.facebook.com/v22.0/me/accounts?` +
         new URLSearchParams({
@@ -189,11 +204,10 @@ app.get("/auth/callback", async (req, res) => {
         })
     );
     const pagesData = await pagesRes.json();
+    console.log("[oauth] /me/accounts:", JSON.stringify(pagesData));
 
     const igAccounts = [];
     for (const page of pagesData.data ?? []) {
-      // instagram_business_account may already be in the page object (inline field)
-      // or we fall back to a dedicated request using the page-level token
       let igId = page.instagram_business_account?.id;
 
       if (!igId && page.access_token) {
@@ -205,6 +219,7 @@ app.get("/auth/callback", async (req, res) => {
             })
         );
         const igData = await igRes.json();
+        console.log(`[oauth] /${page.id} instagram_business_account:`, JSON.stringify(igData));
         igId = igData.instagram_business_account?.id;
       }
 
